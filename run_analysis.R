@@ -1,56 +1,48 @@
-library("data.table")
-library("reshape2")
+library(dplyr)
 
-#download and unzip the data
+#Download and unzip the dataset#
 
-zipurl<- "https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
-zipfile<- "UCI HAR Dataset.zip"
+zipURL<-"https://d396qusza40orc.cloudfront.net/getdata%2Fprojectfiles%2FUCI%20HAR%20Dataset.zip"
+zipFILE<-"UCI HAR DATASET.zip"
 
-if (!file.exists(zipfile)) {
-          download.file(zipurl, zipfile, mode = "wb")}
+if(!file.exists(zipFILE)) 
 
-datapath <- "UCI HAR Dataset"
-if (!file.exists(datapath)) {
-          unzip(zipfile)}
+unzip(zipFILE)
 
-#activities and features
+#load activity labels and features#
 
-activitylabels <- fread(file.path(datapath, "activity_labels.txt")
-                        , col.names = c("classLabels", "activityName"))
-features <- fread(file.path(datapath, "features.txt")
-                  , col.names = c("index", "featureNames"))
-featurestokeep <- grep("(mean|std)\\(\\)", features[, featureNames])
-measurements <- features[featurestokeep, featureNames]
-measurements <- gsub('[()]', '', measurements)
-measurements
+activityLabels<-read.table("UCI HAR Dataset/activity_labels.txt")
+activityLabels[,2]<-as.character(activityLabels[,2])
+features<-read.table("UCI HAR Dataset/features.txt")
+features[,2]<-as.character(features[,2])
 
-#test data
+#Extracts only the measurements on the mean and standard deviation for each measurement.
 
-TestActivities  <- read.table(file.path(datapath, "test/Y_test.txt" ),header = FALSE)
-TestSubject<-read.table(file.path(datapath, "test/subject_test.txt"),header = FALSE)
-TestFeatures<-read.table(file.path(datapath, "test/X_test.txt" ),header = FALSE)
+meanandstd_features<-grep(".*mean.*|.*std.*",features[,2])
+meanandstd<-features[meanandstd_features,2]
+meanandstd=gsub('-mean','-Mean',meanandstd)
+meanandstd=gsub('-std','Std',meanandstd)
+meanandstd<-gsub('[-()]','',meanandstd)
 
-#test data
+#load the datasets#
+train<-read.table("UCI HAR Dataset/train/X_train.txt")[meanandstd_features]
+train_activities<-read.table("UCI HAR Dataset/train/Y_train.txt")
+train_subjects<-read.table("UCI HAR dataset/train/subject_train.txt")
+train <- cbind(train_subjects, train_activities, train)
+test<-read.table("UCI HAR Dataset/test/X_test.txt")[meanandstd_features]
+test_activities <- read.table("UCI HAR Dataset/test/Y_test.txt")
+test_subjects <- read.table("UCI HAR Dataset/test/subject_test.txt")
+test <- cbind(test_subjects, test_activities, test)
 
-TrainActivities <- read.table(file.path(datapath, "train/Y_train.txt"),header = FALSE)
-TrainSubject<-read.table(file.path(datapath, "train/subject_train.txt"),header = FALSE)
-TrainFeatures<-read.table(file.path(datapath, "train/X_train.txt"),header = FALSE)
+#Merge the training and the test sets to create one data set.#
+allData <- rbind(train, test)
+colnames(allData) <- c("subject", "activity", meanandstd)
 
+#factors#
+allData$activity <- factor(allData$activity, levels = activityLabels[,1], labels = activityLabels[,2])
+allData$subject <- as.factor(allData$subject)
 
-#bind data
-SubjectData <- rbind(TrainSubject, TestSubject)
-ActivityData<- rbind(TrainActivities, TestActivities)
-FeaturesData<- rbind(TrainFeatures, TestFeatures)
+allData.melted <- melt(allData, id = c("subject", "activity"))
+allData.mean <- dcast(allData.melted, subject + activity ~ variable, mean)
 
-#give names to variables
-names(SubjectData)<-c("subject")
-names(ActivityData)<- c("activity")
-FeaturesNames <- read.table(file.path(datapath, "features.txt"),head=FALSE)
-names(FeaturesData)<- FeaturesNames$V2
-
-MergeData <- cbind(SubjectData, ActivityData)
-FinalData<-cbind(FeaturesData,MergeData)
-FinalData
-
-#write data
-write.table( FinalData, file = "tidy.csv", quote = FALSE)
+write.table(allData.mean, "tidy.txt", row.names = FALSE, quote = FALSE)
